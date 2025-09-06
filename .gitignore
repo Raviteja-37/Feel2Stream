@@ -1,0 +1,58 @@
+# =========================
+# Node.js dependencies
+# =========================
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# =========================
+# Python environments & cache
+# =========================
+ml/.venv/
+ml/.venv310/
+ml/__pycache__/
+
+# =========================
+# Environment variables
+# =========================
+.env
+server/.env
+client/.env
+
+# =========================
+# OS / Editor files
+# =========================
+.DS_Store
+dist/
+build/
+
+# =========================
+# ML datasets & raw files
+# =========================
+ml/voice_emotion/ravdess/
+ml/face_emotion/fer2013/
+*.wav
+*.jp*
+
+# =========================
+# ML trained models
+# =========================
+ml/voice_emotion/*.h5
+ml/voice_emotion/*.keras
+ml/voice_emotion/voice_emotion_best_transfer.keras
+ml/face_emotion/face_emotion_model.keras
+ml/face_emotion/face_emotion_best.keras
+ml/face_emotion/face_emotion_model_final.keras
+ml/face_emotion/face_emotion_best_transfer.keras
+ml/text_emotion/models/
+
+# =========================
+# Other temporary or build files
+# =========================
+*.log
+*.tmp
+
+*.wav
+*.jp*
+*.h5
+*.keras

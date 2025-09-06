@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+pydantic
+numpy
+pillow
+python-multipart
+librosa
+soundfile
+joblib
+tensorflow
+tqdm
+matplotlib

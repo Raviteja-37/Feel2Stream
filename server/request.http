@@ -1,0 +1,69 @@
+### Health check
+GET http://localhost:8000/health
+
+
+
+
+### Register
+POST http://localhost:8000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Ravi",
+  "email": "ravi@example.com",
+  "password": "password123"
+}
+
+### Login
+POST http://localhost:8000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "ravi@example.com",
+  "password": "password123"
+}
+
+### Get current user (replace {{token}})
+GET http://localhost:8000/api/auth/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4YmE5Yzg4MmIxZWY2MGZjZTAwZDgyNSIsImlhdCI6MTc1NzEyNjQyNCwiZXhwIjoxNzU3NzMxMjI0fQ.LSarDhE5D7kp2v_8oPKfJdnh7Go5k6AsNncJ6Lyc0Ng
+
+### Predict emotion from text
+POST http://localhost:8000/api/emotion/text
+Content-Type: application/json
+
+{
+  "text": "I feel very happy today!"
+}
+
+### Generate recommendations directly from emotion
+POST http://localhost:8000/api/recs/generate
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4YmE5Yzg4MmIxZWY2MGZjZTAwZDgyNSIsImlhdCI6MTc1NzEyNjQyNCwiZXhwIjoxNzU3NzMxMjI0fQ.LSarDhE5D7kp2v_8oPKfJdnh7Go5k6AsNncJ6Lyc0Ng
+
+{
+  "emotion": "happy"
+}
+
+### Get my saved recommendations
+GET http://localhost:8000/api/recs/my
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4YmE5Yzg4MmIxZWY2MGZjZTAwZDgyNSIsImlhdCI6MTc1NzEyNjQyNCwiZXhwIjoxNzU3NzMxMjI0fQ.LSarDhE5D7kp2v_8oPKfJdnh7Go5k6AsNncJ6Lyc0Ng
+
+
+
+### Predict voice emotion
+POST http://localhost:8000/api/emotion/voice
+
+audio=@ml/voice_emotion/ravdess/Actor_01/03-01-01-01-01-01-01.wav
+
+
+### Test generate recommendations
+POST http://localhost:8000/api/recs/generate
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4YmE5Yzg4MmIxZWY2MGZjZTAwZDgyNSIsImlhdCI6MTc1NzEyNjQyNCwiZXhwIjoxNzU3NzMxMjI0fQ.LSarDhE5D7kp2v_8oPKfJdnh7Go5k6AsNncJ6Lyc0Ng
+
+{
+  "emotion": "happy",
+  "interest": "pop",
+  "genre": "dance",
+  "customText": ""
+}
