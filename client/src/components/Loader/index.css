@@ -1,0 +1,58 @@
+/* Common Wrapper */
+.loader-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Full-Screen Version */
+.fullscreen {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9999;
+}
+
+/* Orb Styles */
+.gradient-orb {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(45deg, #00e0ff, #ff00c8, #ffea00);
+  background-size: 300% 300%;
+  animation: orbPulse 2s ease-in-out infinite, gradientShift 5s ease infinite;
+}
+
+/* Small version for buttons */
+.gradient-orb.small {
+  width: 20px;
+  height: 20px;
+}
+
+/* Orb Pulse */
+@keyframes orbPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 10px rgba(0, 224, 255, 0.6), 0 0 20px rgba(255, 0, 200, 0.4),
+      0 0 30px rgba(255, 234, 0, 0.3);
+  }
+  50% {
+    transform: scale(1.2);
+    box-shadow: 0 0 20px rgba(0, 224, 255, 0.8), 0 0 40px rgba(255, 0, 200, 0.6),
+      0 0 60px rgba(255, 234, 0, 0.5);
+  }
+}
+
+/* Gradient Shift */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}

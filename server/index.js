@@ -10,13 +10,30 @@ const authRoutes = require('./routes/authRoutes');
 const recRoutes = require('./routes/recommendationRoutes');
 
 const app = express();
-
+const allowedOrigins = [
+  'http://localhost:3000', // React dev server
+  'http://127.0.0.1:3000',
+];
 // Security & parsing
 app.use(helmet());
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('dev'));
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        const msg =
+          'The CORS policy for this site does not allow access from this origin.';
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
+    credentials: true,
+  })
+);
 
 // Connect DB
 connectDB();

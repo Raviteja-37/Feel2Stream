@@ -7,7 +7,7 @@ const { register, login, me } = require('../controllers/authController');
 router.post(
   '/register',
   [
-    body('name').trim().notEmpty().withMessage('Name required'),
+    body('username').trim().notEmpty().withMessage('Name required'),
     body('email').isEmail().withMessage('Valid email required'),
     body('password')
       .isLength({ min: 6 })

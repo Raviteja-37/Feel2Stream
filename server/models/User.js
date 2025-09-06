@@ -12,7 +12,7 @@ const RecommendationSchema = new Schema(
 
 const UserSchema = new Schema(
   {
-    name: { type: String, required: true, trim: true },
+    username: { type: String, required: true, trim: true },
     email: {
       type: String,
       required: true,
