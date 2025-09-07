@@ -9,11 +9,11 @@ import {
 } from '../../services/api.js';
 import RecordRTC from 'recordrtc';
 import Cookies from 'js-cookie';
-import ReactPlayer from 'react-player'; // ensure installed: npm install react-player
-import './index.css'; // optional, create minimal styles if you want
+import ReactPlayer from 'react-player';
+import { ButtonLoader } from '../Loader';
+import './index.css';
 
 const INTERESTS = [
-  'random',
   'sports',
   'songs',
   'movies',
@@ -30,24 +30,32 @@ const GENRES = [
   'classical',
   'jazz',
 ];
+const LANGUAGES = [
+  'english',
+  'hindi',
+  'telugu',
+  'spanish',
+  'french',
+  'german',
+  'japanese',
+  'korean',
+];
 
 export default function Dashboard() {
-  const [mode, setMode] = useState('text'); // 'text' | 'voice' | 'face'
+  const [mode, setMode] = useState('text');
   const [textInput, setTextInput] = useState('');
-  const [interest, setInterest] = useState('random');
-  const [genre, setGenre] = useState('indie pop');
+  const [interest, setInterest] = useState('');
+  const [genre, setGenre] = useState('');
+  const [language, setLanguage] = useState('');
   const [customText, setCustomText] = useState('');
-  const [items, setItems] = useState([]); // results (yt + spotify)
+  const [items, setItems] = useState([]);
   const [emotion, setEmotion] = useState(null);
   const [confidence, setConfidence] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // voice recording
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const [isRecording, setIsRecording] = useState(false);
-  const streamAudioRef = useRef(null);
   const recordRef = useRef(null);
+  const [isRecording, setIsRecording] = useState(false);
 
   // face webcam
   const videoRef = useRef(null);
@@ -57,18 +65,12 @@ export default function Dashboard() {
   const [faceActive, setFaceActive] = useState(false);
   const [lastFaceSentAt, setLastFaceSentAt] = useState(0);
 
-  // saved recommendations (for logged-in users)
+  // saved recommendations
   const [savedRecs, setSavedRecs] = useState([]);
-
   const token = Cookies.get('token');
 
   useEffect(() => {
-    if (token) {
-      fetchSavedRecs().catch((e) => {
-        // ignore
-      });
-    }
-    // cleanup on unmount
+    if (token) fetchSavedRecs().catch(() => {});
     return () => {
       stopFaceCapture();
       stopRecording();
@@ -76,15 +78,48 @@ export default function Dashboard() {
     // eslint-disable-next-line
   }, []);
 
-  // fetch saved recommendations
   async function fetchSavedRecs() {
     try {
       const data = await getMyRecommendations();
       setSavedRecs(data.recommendations || []);
-    } catch (err) {
-      console.warn('No saved recs / not authenticated', err?.message || err);
+    } catch {
       setSavedRecs([]);
     }
+  }
+
+  // Helper: build generate payload (language is appended to customText as fallback)
+  function buildGeneratePayload(forEmotion) {
+    // Build a fallback customText only if user typed something
+    const fallbackCustom = customText?.trim() || undefined;
+
+    // Append language to interest (for YouTube) and genre (for Spotify) in backend
+    // So we don't need to send extra params
+    const interestWithLang = interest
+      ? language
+        ? `${interest} ${language}`
+        : interest
+      : undefined;
+
+    const genreWithLang = genre
+      ? language
+        ? `${genre} ${language}`
+        : genre
+      : undefined;
+
+    // Build payload
+    const payload = {
+      emotion: forEmotion,
+      interest: interestWithLang, // YouTube
+      genre: genreWithLang, // Spotify
+      customText: fallbackCustom, // highest priority
+    };
+
+    // Remove undefined keys
+    Object.keys(payload).forEach((key) => {
+      if (payload[key] === undefined) delete payload[key];
+    });
+
+    return payload;
   }
 
   // ---------- TEXT ----------
@@ -92,20 +127,30 @@ export default function Dashboard() {
     e?.preventDefault();
     if (!textInput?.trim()) return;
     setLoading(true);
+    setItems([]); // clear old results immediately
     try {
       const resp = await predictText(textInput.trim());
       setEmotion(resp.emotion || resp.label);
       setConfidence(resp.confidence || resp.score || null);
-      setItems(resp.items || []);
-      // optionally, if no items returned, you can call generate endpoint:
-      if (!resp.items || resp.items.length === 0) {
-        const gen = await generateFromEmotion({
-          emotion: resp.emotion || resp.label,
-          interest,
-          customText,
-          genre,
-        });
-        setItems(gen.items || []);
+
+      // If user selected any filter (including language), ask generator for filtered results.
+      const anyFilterSelected = Boolean(
+        language || interest || genre || customText
+      );
+      if (anyFilterSelected) {
+        const payload = buildGeneratePayload(resp.emotion || resp.label);
+        console.log('generateFromEmotion payload (text):', payload);
+        const gen = await generateFromEmotion(payload);
+        setItems(gen.items || resp.items || []);
+      } else {
+        // default behaviour: use resp.items, fallback to generator only if empty
+        setItems(resp.items || []);
+        if (!resp.items || resp.items.length === 0) {
+          const payload = buildGeneratePayload(resp.emotion || resp.label);
+          console.log('generateFromEmotion payload (text fallback):', payload);
+          const gen = await generateFromEmotion(payload);
+          setItems(gen.items || []);
+        }
       }
     } catch (err) {
       console.error('predictText failed', err);
@@ -129,13 +174,14 @@ export default function Dashboard() {
       setIsRecording(true);
     } catch (err) {
       console.error(err);
+      alert('Could not start recording. Check microphone permissions.');
     }
   }
 
   async function stopRecording() {
     if (!recordRef.current) return;
     recordRef.current.stopRecording(async () => {
-      const blob = recordRef.current.getBlob(); // WAV blob
+      const blob = recordRef.current.getBlob();
       await sendVoiceBlob(blob, 'recording.wav');
       recordRef.current = null;
       setIsRecording(false);
@@ -144,21 +190,28 @@ export default function Dashboard() {
 
   async function sendVoiceBlob(blob, filename = 'recording.wav') {
     setLoading(true);
+    setItems([]); // clear old results immediately
     try {
-      const buffer = await blob.arrayBuffer(); // convert Blob to ArrayBuffer
-      const resp = await predictVoiceBlob(blob, filename); // pass Buffer
+      const resp = await predictVoiceBlob(blob, filename);
       setEmotion(resp.emotion || resp.label);
       setConfidence(resp.confidence || resp.score || null);
-      setItems(resp.items || []);
 
-      if (!resp.items || resp.items.length === 0) {
-        const gen = await generateFromEmotion({
-          emotion: resp.emotion || resp.label,
-          interest,
-          customText,
-          genre,
-        });
-        setItems(gen.items || []);
+      const anyFilterSelected = Boolean(
+        language || interest || genre || customText
+      );
+      if (anyFilterSelected) {
+        const payload = buildGeneratePayload(resp.emotion || resp.label);
+        console.log('generateFromEmotion payload (voice):', payload);
+        const gen = await generateFromEmotion(payload);
+        setItems(gen.items || resp.items || []);
+      } else {
+        setItems(resp.items || []);
+        if (!resp.items || resp.items.length === 0) {
+          const payload = buildGeneratePayload(resp.emotion || resp.label);
+          console.log('generateFromEmotion payload (voice fallback):', payload);
+          const gen = await generateFromEmotion(payload);
+          setItems(gen.items || []);
+        }
       }
 
       await fetchSavedRecs();
@@ -180,9 +233,7 @@ export default function Dashboard() {
       videoRef.current.play();
       setFaceActive(true);
 
-      // capture every 3 seconds
       faceIntervalRef.current = setInterval(async () => {
-        // avoid overlapping requests: skip if last sent < 2500ms
         const now = Date.now();
         if (now - lastFaceSentAt < 2500) return;
         if (!canvasRef.current || !videoRef.current) return;
@@ -216,21 +267,30 @@ export default function Dashboard() {
 
   async function sendFaceBlob(blob) {
     setLoading(true);
+    setItems([]); // clear old results immediately
     try {
       const resp = await predictFaceBlob(blob, 'snapshot.jpg');
       setEmotion(resp.emotion || resp.label);
       setConfidence(resp.confidence || resp.score || null);
-      setItems(resp.items || []);
-      // fallback to generator if no items returned
-      if (!resp.items || resp.items.length === 0) {
-        const gen = await generateFromEmotion({
-          emotion: resp.emotion || resp.label,
-          interest,
-          customText,
-          genre,
-        });
-        setItems(gen.items || []);
+
+      const anyFilterSelected = Boolean(
+        language || interest || genre || customText
+      );
+      if (anyFilterSelected) {
+        const payload = buildGeneratePayload(resp.emotion || resp.label);
+        console.log('generateFromEmotion payload (face):', payload);
+        const gen = await generateFromEmotion(payload);
+        setItems(gen.items || resp.items || []);
+      } else {
+        setItems(resp.items || []);
+        if (!resp.items || resp.items.length === 0) {
+          const payload = buildGeneratePayload(resp.emotion || resp.label);
+          console.log('generateFromEmotion payload (face fallback):', payload);
+          const gen = await generateFromEmotion(payload);
+          setItems(gen.items || []);
+        }
       }
+
       await fetchSavedRecs();
     } catch (err) {
       console.error('predictFace failed', err);
@@ -250,12 +310,10 @@ export default function Dashboard() {
         streamVideoRef.current = null;
       }
       setFaceActive(false);
-    } catch (e) {
-      // ignore
-    }
+    } catch {}
   }
 
-  // ---------- GENERATE FROM EMOTION (manual) ----------
+  // ---------- GENERATE ----------
   async function handleGenerateFromEmotion() {
     if (!emotion) {
       alert(
@@ -263,14 +321,16 @@ export default function Dashboard() {
       );
       return;
     }
+    if (!interest && !genre && !language && !customText) {
+      alert('Please select at least one filter before generating.');
+      return;
+    }
     setLoading(true);
+    setItems([]);
     try {
-      const resp = await generateFromEmotion({
-        emotion,
-        interest: interest !== 'random' ? interest : undefined,
-        customText: customText || undefined,
-        genre: genre || undefined,
-      });
+      const payload = buildGeneratePayload(emotion);
+      console.log('generateFromEmotion payload (manual):', payload);
+      const resp = await generateFromEmotion(payload);
       setItems(resp.items || []);
       await fetchSavedRecs();
     } catch (err) {
@@ -281,16 +341,12 @@ export default function Dashboard() {
     }
   }
 
-  // ---------- RENDER helpers ----------
+  // ---------- RENDER ----------
   function renderItem(it, idx) {
-    // ---------- YouTube ----------
     if (it.type === 'youtube' && it.id) {
-      // Check for it.id instead of it.url
-      // ✅ FIX: Use the more reliable /embed/ URL format
       const embedUrl = `https://www.youtube.com/embed/${it.id}`;
-
       return (
-        <div key={it.id} className="yt-card">
+        <div key={it.id || idx} className="yt-card">
           <div className="yt-title">
             {it.title?.replace(/&quot;/g, '"') || it.name}
           </div>
@@ -299,7 +355,7 @@ export default function Dashboard() {
             style={{ position: 'relative', paddingTop: '56.25%' }}
           >
             <ReactPlayer
-              src={embedUrl} // Use the new embedUrl
+              src={embedUrl}
               controls
               width="100%"
               height="100%"
@@ -313,17 +369,14 @@ export default function Dashboard() {
       );
     }
 
-    // ---------- Spotify ----------
     if (it.type === 'spotify') {
       const spotifyEmbedUrl = it.id
         ? `https://open.spotify.com/embed/track/${it.id}`
         : it.spotify_url;
-
       return (
-        <div key={it.id} className="result-item spotify-card">
+        <div key={it.id || idx} className="spotify-card">
           <div className="track-title">{it.title || it.name}</div>
           <div className="track-artist">{it.artist || it.artists || ''}</div>
-
           {spotifyEmbedUrl ? (
             <iframe
               title={it.title || it.name}
@@ -337,7 +390,6 @@ export default function Dashboard() {
           ) : it.preview_url ? (
             <audio controls src={it.preview_url} />
           ) : null}
-
           <a href={it.spotify_url || it.url} target="_blank" rel="noreferrer">
             Open on Spotify
           </a>
@@ -345,7 +397,6 @@ export default function Dashboard() {
       );
     }
 
-    // ---------- fallback ----------
     return (
       <pre key={idx} style={{ width: '100%', whiteSpace: 'pre-wrap' }}>
         {JSON.stringify(it, null, 2)}
@@ -353,7 +404,6 @@ export default function Dashboard() {
     );
   }
 
-  // UI for mode controls
   return (
     <div className="dashboard-root">
       <h2>Welcome to Feel2Stream Dashboard</h2>
@@ -364,7 +414,6 @@ export default function Dashboard() {
           <select
             value={mode}
             onChange={(e) => {
-              // clean up any active streams when switching
               if (mode === 'face') stopFaceCapture();
               if (mode === 'voice') stopRecording();
               setMode(e.target.value);
@@ -375,7 +424,7 @@ export default function Dashboard() {
           >
             <option value="text">Text</option>
             <option value="voice">Voice</option>
-            <option value="face">Face (webcam)</option>
+            <option value="face">Face</option>
           </select>
         </label>
 
@@ -385,6 +434,7 @@ export default function Dashboard() {
             value={interest}
             onChange={(e) => setInterest(e.target.value)}
           >
+            <option value="">Select interest</option>
             {INTERESTS.map((it) => (
               <option key={it} value={it}>
                 {it}
@@ -396,9 +446,25 @@ export default function Dashboard() {
         <label>
           Spotify Genre:
           <select value={genre} onChange={(e) => setGenre(e.target.value)}>
+            <option value="">Select genre</option>
             {GENRES.map((g) => (
               <option key={g} value={g}>
                 {g}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Language:
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+          >
+            <option value="">Select language</option>
+            {LANGUAGES.map((l) => (
+              <option key={l} value={l}>
+                {l}
               </option>
             ))}
           </select>
@@ -417,12 +483,11 @@ export default function Dashboard() {
           onClick={handleGenerateFromEmotion}
           disabled={!emotion || loading}
         >
-          Generate (refresh results for current emotion)
+          {loading ? <ButtonLoader /> : 'Generate (refresh results)'}
         </button>
       </div>
 
       <div className="mode-area">
-        {/* TEXT */}
         {mode === 'text' && (
           <form onSubmit={handleSubmitText} className="text-area">
             <textarea
@@ -433,16 +498,15 @@ export default function Dashboard() {
             />
             <div>
               <button type="submit" disabled={loading}>
-                {loading ? 'Analyzing...' : 'Analyze Text'}
+                {loading ? <ButtonLoader /> : 'Analyze Text'}
               </button>
             </div>
           </form>
         )}
 
-        {/* VOICE */}
         {mode === 'voice' && (
           <div className="voice-area">
-            <p>Record audio and we will analyze emotion from your voice.</p>
+            <p>Record audio and we will analyze emotion.</p>
             <div>
               {!isRecording ? (
                 <button onClick={startRecording}>Start Recording</button>
@@ -450,15 +514,9 @@ export default function Dashboard() {
                 <button onClick={stopRecording}>Stop & Analyze</button>
               )}
             </div>
-            <p style={{ color: 'gray' }}>
-              Recorded format: browser default (webm/ogg). If backend expects
-              WAV and fails, we will need a WAV converter in JS or server-side
-              FFmpeg.
-            </p>
           </div>
         )}
 
-        {/* FACE */}
         {mode === 'face' && (
           <div className="face-area">
             <video
@@ -471,9 +529,7 @@ export default function Dashboard() {
             <canvas ref={canvasRef} style={{ display: 'none' }} />
             <div>
               {!faceActive ? (
-                <button onClick={startFaceCapture}>
-                  Start Webcam (capture every 3s)
-                </button>
+                <button onClick={startFaceCapture}>Start Webcam</button>
               ) : (
                 <button onClick={stopFaceCapture}>Stop Webcam</button>
               )}
@@ -488,16 +544,20 @@ export default function Dashboard() {
       </div>
 
       <div className="results">
-        <h3>Recommendations / Results</h3>
-        {loading && <div>Loading results...</div>}
-        {items && items.length === 0 && <div>No items found yet.</div>}
+        <h3>Recommendations</h3>
+        {loading && (
+          <div style={{ margin: 12 }}>
+            <ButtonLoader />
+          </div>
+        )}
+        {items.length === 0 && !loading && <div>No items found yet.</div>}
         <div className="results-grid">
-          {items?.map((it, idx) => renderItem(it, idx))}
+          {items.map((it, idx) => renderItem(it, idx))}
         </div>
       </div>
 
       <div className="saved-recs">
-        <h3>Saved Recommendations (your last saved items)</h3>
+        <h3>Saved Recommendations</h3>
         {savedRecs.length === 0 && <div>No saved recommendations yet.</div>}
         {savedRecs.map((r, i) => (
           <div key={i} className="saved-rec">

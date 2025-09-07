@@ -18,26 +18,32 @@ async function generateRecommendations({
   customText,
   genre,
 } = {}) {
-  // build a search query string based on frontend inputs
   let query;
+
   if (customText && customText.trim()) {
+    // Custom text has highest priority
     query = customText.trim();
-  } else if (interest && interest.trim()) {
-    query = `${emotion} ${interest}`.trim();
-  } else if (genre && genre.trim()) {
-    query = `${emotion} ${genre} music`.trim();
   } else {
-    const keywords = emotionKeywords[emotion] || ['music playlist'];
-    query = keywords[Math.floor(Math.random() * keywords.length)];
+    // Build query intelligently for YouTube and Spotify
+    const youtubeParts = [emotion];
+    const spotifyParts = [emotion];
+
+    if (interest) youtubeParts.push(interest); // interest may already have language appended
+    if (genre) spotifyParts.push(genre); // genre may already have language appended
+
+    youtubeParts.push('video'); // helps YouTube search
+    spotifyParts.push('music'); // helps Spotify search
+
+    // Combine into single string for backend (both services use same query field)
+    query = `${youtubeParts.join(' ')} | ${spotifyParts.join(' ')}`;
   }
 
-  // fetch both youtube and spotify results in parallel
+  // Fetch both YouTube and Spotify in parallel
   const [youtubeResults, spotifyResults] = await Promise.all([
     youtubeService.searchVideos(query, 5),
     spotifyService.searchTracks(query, 5),
   ]);
 
-  // return combined array (frontend can filter by type if needed)
   return [...youtubeResults, ...spotifyResults];
 }
 
